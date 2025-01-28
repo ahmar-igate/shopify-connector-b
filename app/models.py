@@ -28,6 +28,7 @@ class ShopifyOrders(models.Model):
     billing_address = models.TextField(null=True, blank=True)
     tracking_number = models.CharField(max_length=255, null=True, blank=True)
     status = models.CharField(max_length=255, null=True, blank=True)
+    updated_at_shopify = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

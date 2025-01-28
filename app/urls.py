@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import download_data
+from .views import fetch_data, sync_data
 
 urlpatterns = [
-    path('download/', download_data, name='download_data'),
+    path('fetch/', fetch_data, name='fetch'),
+    path('sync_data/', sync_data, name='sync_data'),
 ]
