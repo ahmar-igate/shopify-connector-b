@@ -47,7 +47,7 @@ INSTALLED_APPS = [
     'app',
 ]
 
-INSTALLED_APPS += ['django_celery_beat']
+# INSTALLED_APPS += ['django_celery_beat']
 
 
 MIDDLEWARE = [

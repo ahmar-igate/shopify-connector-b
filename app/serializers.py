@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ShopifyOrders, SecretSurprise, ShopifyConnector
+from .models_backup import ShopifyOrders, SecretSurprise, ShopifyConnector
 
 class ShopifyOrdersSerializer(serializers.ModelSerializer):
     class Meta:
