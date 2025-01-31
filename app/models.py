@@ -35,6 +35,7 @@ class Orders(models.Model):
     tags = models.CharField(max_length=255, null=True, blank=True)
     tracking_number = models.CharField(max_length=255, null=True, blank=True)
     status = models.CharField(max_length=255, null=True, blank=True)
+    store_name = models.CharField(max_length=255, null=True, blank=True)
     
     # created_at_shopify = models.DateTimeField(null=True, blank=True)
     updated_at_shopify = models.DateTimeField(null=True, blank=True)

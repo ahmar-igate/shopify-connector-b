@@ -1,22 +1,62 @@
 import logging
-from django.utils import timezone
 import pandas as pd
 from django.http import JsonResponse
-from rest_framework.decorators import api_view
 from shopify import ShopifyResource, Order
 from urllib.parse import urlparse, parse_qs
 from datetime import timedelta
-from datetime import datetime
 from django.utils.dateparse import parse_datetime
 from django.db import transaction
 from django.db.models import Min, Max
 from django.utils.timezone import now
 from .models import Orders
 from rest_framework.views import APIView
-
-from .utils import convert_to_shopify_date_format, fetch_all_records, process_shopify_records, save_data_to_db
+from .utils import convert_to_shopify_date_format, fetch_all_records, process_shopify_records, save_data_to_db, get_store_name
 
 logger = logging.getLogger(__name__)
+
+def default(request):
+    if request.method == 'GET':
+        try:
+            # Aggregate min, max order_date, and latest updated_at per store_name
+            store_orders = Orders.objects.values('store_name').annotate(
+                created_at_min_shopify=Min('order_date'),
+                created_at_max_shopify=Max('order_date'),
+                updated_at=Max('updated_at')  # Get latest updated_at per store
+            )
+
+            # Convert QuerySet to list for JSON response
+            data = list(store_orders)
+
+            # Ensure there is data before processing min/max sync dates
+            if data:
+                created_at_max_list = [entry['created_at_max_shopify'] for entry in data if entry['created_at_max_shopify']]
+                created_at_min_list = [entry['created_at_min_shopify'] for entry in data if entry['created_at_min_shopify']]
+
+                if created_at_max_list:
+                    created_at_max = max(created_at_max_list)  # Latest max order date
+                    min_date = created_at_max - timedelta(days=100)
+
+                    if created_at_min_list:
+                        created_at_min = min(created_at_min_list)
+                        if min_date < created_at_min:
+                            min_date = created_at_min
+                    else:
+                        min_date = created_at_max  # If no min date exists, set min_date to max_date
+
+                else:
+                    min_date = None
+                    created_at_max = None
+
+            else:
+                min_date = None
+                created_at_max = None
+            print("store_order_dates: ", data)
+
+            return JsonResponse({'store_order_dates': data, 'last_sync_min': min_date, 'last_sync_max': created_at_max})
+
+        except Exception as e:
+            logging.error(str(e))
+            return JsonResponse({'error': str(e)}, status=500)
 
 class fetch_data_shopify(APIView):
     def post(self, request, *args, **kwargs):
@@ -31,7 +71,14 @@ class fetch_data_shopify(APIView):
             min_date = data.get('created_at_min')
             max_date = data.get('created_at_max')
             
-            print(store_url, api_key, password, api_version, min_date, max_date)
+            store_name = get_store_name(store_url)
+            
+            if not store_name:
+                return JsonResponse({'error': 'Store URL not found in predefined stores'}, status=400)
+            else:
+                print("Store Name:", store_name)
+
+            print(store_url, api_key, password, api_version, min_date, max_date, store_name)
 
             if not store_url or not api_key or not password or not api_version or not min_date or not max_date:
                 return JsonResponse({'status': 'error', 'message': 'Missing required fields'})
@@ -48,12 +95,11 @@ class fetch_data_shopify(APIView):
             orders = fetch_all_records(api_key, password, store_url, api_version, created_at_min, created_at_max)
             if not orders:
                 return JsonResponse({'status': 'error', 'message': 'No orders found'})
-            order_data = process_shopify_records(orders)
+            order_data = process_shopify_records(orders, store_name)
             if not order_data:
                 return JsonResponse({'status': 'error', 'message': 'No orders found after processing'})
             
             save_data_to_db(order_data)
-            
 
             return JsonResponse({'status': 'success', 'message': 'Orders saved successfully'})
         except Exception as e:
@@ -71,6 +117,15 @@ class sync_data(APIView):
             password = data.get('password')
             store_url = data.get('store_url')
             api_version = data.get('api_version')
+            
+            store_name = get_store_name(store_url)
+            
+            if not store_name:
+                return JsonResponse({'error': 'Store URL not found in predefined stores'}, status=400)
+            else:
+                print("Store Name:", store_name)
+
+            
 
             if not all([api_key, password, store_url, api_version]):
                 return JsonResponse({'error': 'Missing required fields'}, status=400)
@@ -79,7 +134,7 @@ class sync_data(APIView):
             shop_url = f"https://{api_key}:{password}@{store_url}/admin/api/{api_version}"
             ShopifyResource.set_site(shop_url)
             
-            # Get the most recent `created_at_shopify` date in the database
+            # Get the most recent `order_date` in the database
             created_at_range = Orders.objects.aggregate(
             created_at_min_shopify=Min('order_date'),
             created_at_max_shopify=Max('order_date')
@@ -103,12 +158,13 @@ class sync_data(APIView):
             # Fetch existing records for comparison
             existing_orders = Orders.objects.filter(
                 order_date__gte=min_date,
-                order_date__lte=max_date
-            ).values('orderID', 'updated_at_shopify', 'id')  # Fetch `id`, `orderID`, and `updated_at_shopify`
+                order_date__lte=max_date,
+                store_name=store_name
+            ).values('orderID', 'updated_at_shopify', 'id', 'store_name')  
 
             # Convert existing orders to a dictionary for quick lookup
             existing_orders_dict = {
-                order['orderID']: {'updated_at_shopify': order['updated_at_shopify'], 'id': order['id']}
+                order['orderID']: {'updated_at_shopify': order['updated_at_shopify'], 'id': order['id'], 'store_name': order['store_name']}
                 for order in existing_orders
             }
             print("existing orders: ", existing_orders_dict)
@@ -161,7 +217,6 @@ class sync_data(APIView):
                     continue
                 
                 if order_id in existing_orders_dict:
-                    print("here")
                     existing_order = existing_orders_dict[order_id]
                     db_updated_at_shopify = existing_order['updated_at_shopify']
                     db_id = existing_order['id']
@@ -192,7 +247,7 @@ class sync_data(APIView):
                         records_to_update.append(record)
                     else:
                         # records_to_create.append(testOrders(**order))
-                        logger.info(f"Order {order_id} not found in the database. Skipping.")
+                        logger.info(f"Skipping Order {order_id}.")
                         continue
                     
             if records_to_update:

@@ -6,8 +6,25 @@ from urllib.parse import urlparse, parse_qs
 import pandas as pd
 from .models import Orders, OrderItems, Customer
 from django.db import transaction
+
 logger = logging.getLogger(__name__)
 
+def get_store_name(store_url):
+    stores = {
+        "UK":['rdx-sports-store.myshopify.com'],
+        "USA":['rdx-sports-store-usa.myshopify.com'],
+        "CA":['rdx-sports-store-canada.myshopify.com'],
+        "EU":['rdx-sports-store-europe.myshopify.com'],
+        "Middle East":['rdx-sports-middle-east.myshopify.com'],
+        "Global": ['rdx-sports-store-global.myshopify.com']
+        }
+    store_name = None
+    for region, urls in stores.items():
+        if store_url in urls:
+            store_name = region
+            break 
+        
+    return store_name
 
 def convert_to_shopify_date_format(date_str):
     try:
@@ -59,7 +76,7 @@ def fetch_all_records(api_key, password, store_url, api_version, created_at_min,
     return orders
 
 # processes the fetched records
-def process_shopify_records(orders):
+def process_shopify_records(orders, store_name):
     if not orders:
         return JsonResponse({'message': 'No orders found'}, status=404)
     
@@ -131,13 +148,14 @@ def process_shopify_records(orders):
                     "refunded_amount": f"{refunded_amount:.2f} {order.currency}",
                     "total_paid": f"{float(order.total_price or 0.00):.2f} {order.currency}",
                     "payment_status": order.financial_status,
-                    "fulfillment_status": order.fulfillment_status,
+                    "fulfillment_status": order.fulfillment_status if order.fulfillment_status else "unfulfilled",
                     "channel": order.source_name,
                     "destination": destination,
                     "tags": order.tags,
                     "tracking_number": tracking_number,
                     "status": status,
                     "updated_at_shopify": order.updated_at,
+                    "store_name": store_name,
                 })                
             
            
@@ -164,7 +182,6 @@ def save_data_to_db(order_data):
                     shipping_address=order["shipping_address"],
                     billing_address=order["billing_address"]
                 )
-
                 # Check if order already exists
                 order_instance, created = Orders.objects.get_or_create(
                     orderID=order["OrderID"],
@@ -189,6 +206,7 @@ def save_data_to_db(order_data):
                         "tracking_number": order.get("tracking_number"),
                         "status": order.get("status"),
                         "updated_at_shopify": order.get("updated_at_shopify"),
+                        "store_name": order.get("store_name"),
                     },
                 )
 
