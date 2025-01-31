@@ -36,18 +36,23 @@ def convert_to_shopify_date_format(date_str):
         raise ValueError(f"Invalid date format: {e}")
     
 # fetches all records from Shopify
-def fetch_all_records(api_key, password, store_url, api_version, created_at_min, created_at_max):
+def fetch_all_records(api_key, password, store_url, api_version, created_at_min=None, created_at_max=None):
     shop_url = f"https://{api_key}:{password}@{store_url}/admin/api/{api_version}"
     ShopifyResource.set_site(shop_url)
 
     orders = []
     limit = 250
     #for fetching data
-    params = {
-        "created_at_min": created_at_min,
-        "created_at_max": created_at_max,
-        "limit": limit,
-    }
+    if created_at_max is None and created_at_min is None:
+        params = {
+            "limit": limit,
+        }
+    else:
+        params = {
+            "created_at_min": created_at_min,
+            "created_at_max": created_at_max,
+            "limit": limit,
+        }
     
     current_orders = Order.find(**params)
     while current_orders:

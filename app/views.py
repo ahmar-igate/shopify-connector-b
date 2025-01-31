@@ -70,6 +70,8 @@ class fetch_data_shopify(APIView):
             api_version = data.get('api_version')
             min_date = data.get('created_at_min')
             max_date = data.get('created_at_max')
+            fetchsync = data.get('fetchsync')
+            
             
             store_name = get_store_name(store_url)
             
@@ -78,21 +80,30 @@ class fetch_data_shopify(APIView):
             else:
                 print("Store Name:", store_name)
 
-            print(store_url, api_key, password, api_version, min_date, max_date, store_name)
+            # print(store_url, api_key, password, api_version, min_date, max_date, store_name)
+            
+            if fetchsync is False:
+                #Fetch partial data from shopify according to date range
+                print("fetch sync: ", fetchsync)
+                if not store_url or not api_key or not password or not api_version or not min_date or not max_date:
+                    return JsonResponse({'status': 'error', 'message': 'Missing required fields'})
 
-            if not store_url or not api_key or not password or not api_version or not min_date or not max_date:
-                return JsonResponse({'status': 'error', 'message': 'Missing required fields'})
-            
-            try:
-                created_at_min = convert_to_shopify_date_format(min_date)
-                created_at_max = convert_to_shopify_date_format(max_date)
-            except ValueError as e:
-                return JsonResponse({'error': str(e)}, status=400)
-    
-            if created_at_min > created_at_max:
-                return JsonResponse({'error': 'Start date cannot be after the end date.'}, status=400)
-            
-            orders = fetch_all_records(api_key, password, store_url, api_version, created_at_min, created_at_max)
+                try:
+                    created_at_min = convert_to_shopify_date_format(min_date)
+                    created_at_max = convert_to_shopify_date_format(max_date)
+                except ValueError as e:
+                    return JsonResponse({'error': str(e)}, status=400)
+
+                if created_at_min > created_at_max:
+                    return JsonResponse({'error': 'Start date cannot be after the end date.'}, status=400)
+
+                orders = fetch_all_records(api_key, password, store_url, api_version, created_at_min, created_at_max)
+            else:
+                #fetch complete data from shopify (excluding date range)
+                if not store_url or not api_key or not password or not api_version:
+                    return JsonResponse({'status': 'error', 'message': 'Missing required fields'})
+                orders = fetch_all_records(api_key, password, store_url, api_version)
+                
             if not orders:
                 return JsonResponse({'status': 'error', 'message': 'No orders found'})
             order_data = process_shopify_records(orders, store_name)
@@ -110,13 +121,15 @@ class sync_data(APIView):
     def post(self, request, *args, **kwargs):
         try:
             """
-                Sync Shopify data with the database by updating matching records and adding new ones.
+            Sync Shopify data with the database by updating matching records and adding new ones.
             """
             data = request.data
             api_key = data.get('api_key')
             password = data.get('password')
             store_url = data.get('store_url')
             api_version = data.get('api_version')
+            fetchsync = data.get('fetchsync')
+            
             
             store_name = get_store_name(store_url)
             
@@ -134,17 +147,18 @@ class sync_data(APIView):
             shop_url = f"https://{api_key}:{password}@{store_url}/admin/api/{api_version}"
             ShopifyResource.set_site(shop_url)
             
-            # Get the most recent `order_date` in the database
-            created_at_range = Orders.objects.aggregate(
-            created_at_min_shopify=Min('order_date'),
-            created_at_max_shopify=Max('order_date')
+            # Get the most recent `order_date` from the database according to the store name
+            created_at_range = Orders.objects.filter(store_name=store_name).aggregate(
+                created_at_min_shopify=Min('order_date'),
+                created_at_max_shopify=Max('order_date')
             )
 
             created_at_max = created_at_range['created_at_max_shopify']
             created_at_min = created_at_range['created_at_min_shopify']
             print("created_at_min_shopify: ", created_at_min)
             print("created_at_max_shopify: ", created_at_max)
-            if created_at_max:
+            if created_at_max and fetchsync is False:
+                print("fetch sync: ", fetchsync)
                 min_date = created_at_max - timedelta(days=100)
                 if min_date < created_at_min:
                     print("min date is smalled then created_at_min")
@@ -154,6 +168,10 @@ class sync_data(APIView):
                 
                 print("min_date: ", min_date)
                 print("max_date: ", max_date)
+            else:
+                print("fetch sync: ", fetchsync)
+                min_date = created_at_min
+                max_date = created_at_max
 
             # Fetch existing records for comparison
             existing_orders = Orders.objects.filter(
