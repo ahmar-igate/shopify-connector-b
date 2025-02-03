@@ -46,12 +46,14 @@ def fetch_all_records(api_key, password, store_url, api_version, created_at_min=
     if created_at_max is None and created_at_min is None:
         params = {
             "limit": limit,
+            'status': 'any',
         }
     else:
         params = {
-            "created_at_min": created_at_min,
-            "created_at_max": created_at_max,
+            "processed_at_min": created_at_min,
+            "processed_at_max": created_at_max,
             "limit": limit,
+            'status': 'any',
         }
     
     current_orders = Order.find(**params)
@@ -133,7 +135,8 @@ def process_shopify_records(orders, store_name):
                 print("shopify_created_at: ", order.created_at)
                 order_data.append({
                     "OrderID": order.name,
-                    "order_date": order.created_at,
+                    "order_processed_at": order.processed_at,
+                    "order_created_at": order.created_at,
                     'item_count': len(order.line_items),
                     "shipping_price": shipping_price,
                     "item_title": item.title,
@@ -192,7 +195,8 @@ def save_data_to_db(order_data):
                     orderID=order["OrderID"],
                     defaults={
                         "customer": customer,  # Now correctly assigned
-                        "order_date": order.get("order_date"),
+                        "order_processed_at": order.get("order_processed_at"),
+                        "order_created_at": order.get("order_created_at"),
                         "item_count": order.get("item_count"),
                         "shipping_price": order.get("shipping_price"),
                         "delivery_method": order.get("delivery_method"),

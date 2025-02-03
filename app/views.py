@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 def default(request):
     if request.method == 'GET':
         try:
-            # Aggregate min, max order_date, and latest updated_at per store_name
+            # Aggregate min, max order_processed_at, and latest updated_at per store_name
             store_orders = Orders.objects.values('store_name').annotate(
-                created_at_min_shopify=Min('order_date'),
-                created_at_max_shopify=Max('order_date'),
+                created_at_min_shopify=Min('order_processed_at'),
+                created_at_max_shopify=Max('order_processed_at'),
                 updated_at=Max('updated_at')  # Get latest updated_at per store
             )
 
@@ -147,10 +147,10 @@ class sync_data(APIView):
             shop_url = f"https://{api_key}:{password}@{store_url}/admin/api/{api_version}"
             ShopifyResource.set_site(shop_url)
             
-            # Get the most recent `order_date` from the database according to the store name
+            # Get the most recent `order_processed_at` from the database according to the store name
             created_at_range = Orders.objects.filter(store_name=store_name).aggregate(
-                created_at_min_shopify=Min('order_date'),
-                created_at_max_shopify=Max('order_date')
+                created_at_min_shopify=Min('order_processed_at'),
+                created_at_max_shopify=Max('order_processed_at')
             )
 
             created_at_max = created_at_range['created_at_max_shopify']
@@ -175,8 +175,8 @@ class sync_data(APIView):
 
             # Fetch existing records for comparison
             existing_orders = Orders.objects.filter(
-                order_date__gte=min_date,
-                order_date__lte=max_date,
+                order_processed_at__gte=min_date,
+                order_processed_at__lte=max_date,
                 store_name=store_name
             ).values('orderID', 'updated_at_shopify', 'id', 'store_name')  
 
@@ -189,9 +189,11 @@ class sync_data(APIView):
             
             # Fetch orders from Shopify API within the same date range
             params = {
-                "created_at_min": min_date,
-                "created_at_max": max_date,
+                "processed_at_min": min_date,
+                "processed_at_max": max_date,
                 "limit": 250,
+                'status': 'any',
+                
             }
             current_orders = Order.find(**params)
 
@@ -249,15 +251,18 @@ class sync_data(APIView):
                             float(refund.transactions[0].amount) if refund.transactions and refund.transactions[0].amount else 0.00
                             for refund in order.refunds
                         ) if order.refunds else 0.00
+                        status = (
+                            order.fulfillments[0].status if order.fulfillments and len(order.fulfillments) > 0 else 'Not available'
+                        )
 
                         record = {
                             'id': db_id,
-                            'refunded_amount': f"{refunded_amount:.2f} {order.currency if hasattr(order, 'currency') else 'USD'}",
-                            'total_paid': f"{float(order.total_price or 0.00):.2f} {order.currency if hasattr(order, 'currency') else 'USD'}",
+                            'refunded_amount': f"{refunded_amount:.2f} {order.currency if hasattr(order, 'currency') else 'N/A'}",
+                            'total_paid': f"{float(order.total_price or 0.00):.2f} {order.currency if hasattr(order, 'currency') else 'N/A'}",
                             'payment_status': order.financial_status if hasattr(order, 'financial_status') else "unknown",
                             'fulfillment_status': order.fulfillment_status if hasattr(order, 'fulfillment_status') else "unknown",
                             'tags': order.tags if hasattr(order, 'tags') else "",
-                            'status': order.status if hasattr(order, 'status') else "unknown",
+                            'status': status,
                             'updated_at_shopify': shopify_updated_at,
                         }
 
