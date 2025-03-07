@@ -103,12 +103,28 @@ WSGI_APPLICATION = 'shopify_connector.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'mssql',
+        'NAME': 'xdemand',
+        'USER': 'zeeshan.bukhari',
+        'PASSWORD': '7qYgJnh1AB40_BXg',
+        'HOST': '51.195.133.237',
+        # 'PORT': '1433',  # Default SQL Server port
+        'OPTIONS': {
+            'driver': 'ODBC Driver 17 for SQL Server',
+            'extra_params': 'TrustServerCertificate=yes',  # Avoid SSL issues
+        },
     }
 }
+
 
 
 # Password validation
