@@ -8,9 +8,11 @@ from django.utils.dateparse import parse_datetime
 from django.db import transaction
 from django.db.models import Min, Max
 from django.utils.timezone import now
+import asyncio
 from .models import Orders
+from asgiref.sync import sync_to_async, async_to_sync
 from rest_framework.views import APIView
-from .utils import convert_to_shopify_date_format, fetch_all_records, process_shopify_records, save_data_to_db, get_store_name
+from .utils import convert_to_shopify_date_format, fetch_all_records, process_shopify_records, save_order_data_to_db, get_store_name, fetch_inventory_data, save_inventory_data_to_db
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +59,11 @@ def default(request):
         except Exception as e:
             logging.error(str(e))
             return JsonResponse({'error': str(e)}, status=500)
-
+        
 class fetch_data_shopify(APIView):
     def post(self, request, *args, **kwargs):
         print("fetch_data_shopify")
-        
+
         try:
             data = request.data
             store_url = data.get('store_url')
@@ -71,51 +73,119 @@ class fetch_data_shopify(APIView):
             min_date = data.get('created_at_min')
             max_date = data.get('created_at_max')
             fetchsync = data.get('fetchsync')
-            
-            
+            fetchinv = data.get('fetchinv')
+
             store_name = get_store_name(store_url)
-            
             if not store_name:
                 return JsonResponse({'error': 'Store URL not found in predefined stores'}, status=400)
+
+            if fetchinv is False:
+                if fetchsync is False:
+                    if not store_url or not api_key or not password or not api_version or not min_date or not max_date:
+                        return JsonResponse({'status': 'error', 'message': 'Missing required fields'})
+
+                    try:
+                        created_at_min = convert_to_shopify_date_format(min_date)
+                        created_at_max = convert_to_shopify_date_format(max_date)
+                    except ValueError as e:
+                        return JsonResponse({'error': str(e)}, status=400)
+
+                    if created_at_min > created_at_max:
+                        return JsonResponse({'error': 'Start date cannot be after the end date.'}, status=400)
+
+                    # Run fetch_all_records in a separate thread
+                    orders = async_to_sync(sync_to_async(fetch_all_records, thread_sensitive=True))(
+                        api_key, password, store_url, api_version, created_at_min, created_at_max
+                    )
+                else:
+                    if not store_url or not api_key or not password or not api_version:
+                        return JsonResponse({'status': 'error', 'message': 'Missing required fields'})
+
+                    orders = async_to_sync(sync_to_async(fetch_all_records, thread_sensitive=True))(
+                        api_key, password, store_url, api_version
+                    )
+
+                if not orders:
+                    return JsonResponse({'status': 'error', 'message': 'No orders found'})
+
+                order_data = process_shopify_records(orders, store_name)
+                if not order_data:
+                    return JsonResponse({'status': 'error', 'message': 'No orders found after processing'})
+
+                save_order_data_to_db(order_data)
             else:
-                print("Store Name:", store_name)
+                all_inventory_data = async_to_sync(sync_to_async(fetch_inventory_data, thread_sensitive=True))(
+                    password, store_url, api_version, store_name
+                )
+                save_inventory_data_to_db(all_inventory_data)
 
-            # print(store_url, api_key, password, api_version, min_date, max_date, store_name)
-            
-            if fetchsync is False:
-                #Fetch partial data from shopify according to date range
-                print("fetch sync: ", fetchsync)
-                if not store_url or not api_key or not password or not api_version or not min_date or not max_date:
-                    return JsonResponse({'status': 'error', 'message': 'Missing required fields'})
-
-                try:
-                    created_at_min = convert_to_shopify_date_format(min_date)
-                    created_at_max = convert_to_shopify_date_format(max_date)
-                except ValueError as e:
-                    return JsonResponse({'error': str(e)}, status=400)
-
-                if created_at_min > created_at_max:
-                    return JsonResponse({'error': 'Start date cannot be after the end date.'}, status=400)
-
-                orders = fetch_all_records(api_key, password, store_url, api_version, created_at_min, created_at_max)
-            else:
-                #fetch complete data from shopify (excluding date range)
-                if not store_url or not api_key or not password or not api_version:
-                    return JsonResponse({'status': 'error', 'message': 'Missing required fields'})
-                orders = fetch_all_records(api_key, password, store_url, api_version)
-                
-            if not orders:
-                return JsonResponse({'status': 'error', 'message': 'No orders found'})
-            order_data = process_shopify_records(orders, store_name)
-            if not order_data:
-                return JsonResponse({'status': 'error', 'message': 'No orders found after processing'})
-            
-            save_data_to_db(order_data)
-
-            return JsonResponse({'status': 'success', 'message': 'Orders saved successfully'})
+            return JsonResponse({'status': 'success', 'message': 'Data saved successfully'})
         except Exception as e:
             logging.error(str(e))
             return JsonResponse({'status': 'error', 'message': str(e)})
+
+# class fetch_data_shopify(APIView):
+#     def post(self, request, *args, **kwargs):
+#         print("fetch_data_shopify")
+        
+#         try:
+#             data = request.data
+#             store_url = data.get('store_url')
+#             api_key = data.get('api_key')
+#             password = data.get('password')
+#             api_version = data.get('api_version')
+#             min_date = data.get('created_at_min')
+#             max_date = data.get('created_at_max')
+#             fetchsync = data.get('fetchsync')
+#             fetchinv = data.get('fetchinv')
+            
+#             store_name = get_store_name(store_url)
+            
+#             if not store_name:
+#                 return JsonResponse({'error': 'Store URL not found in predefined stores'}, status=400)
+#             else:
+#                 print("Store Name:", store_name)
+
+#             # print(store_url, api_key, password, api_version, min_date, max_date, store_name)
+#             if fetchinv is False:
+#                 if fetchsync is False:
+#                     #Fetch partial data from shopify according to date range
+#                     print("fetch sync: ", fetchsync)
+#                     if not store_url or not api_key or not password or not api_version or not min_date or not max_date:
+#                         return JsonResponse({'status': 'error', 'message': 'Missing required fields'})
+
+#                     try:
+#                         created_at_min = convert_to_shopify_date_format(min_date)
+#                         created_at_max = convert_to_shopify_date_format(max_date)
+#                     except ValueError as e:
+#                         return JsonResponse({'error': str(e)}, status=400)
+
+#                     if created_at_min > created_at_max:
+#                         return JsonResponse({'error': 'Start date cannot be after the end date.'}, status=400)
+
+#                     orders = fetch_all_records(api_key, password, store_url, api_version, created_at_min, created_at_max)
+#                 else:
+#                     #fetch complete data from shopify (excluding date range)
+#                     if not store_url or not api_key or not password or not api_version:
+#                         return JsonResponse({'status': 'error', 'message': 'Missing required fields'})
+#                     orders = fetch_all_records(api_key, password, store_url, api_version)
+
+#                 if not orders:
+#                     return JsonResponse({'status': 'error', 'message': 'No orders found'})
+#                 order_data = process_shopify_records(orders, store_name)
+#                 if not order_data:
+#                     return JsonResponse({'status': 'error', 'message': 'No orders found after processing'})
+
+#                 save_order_data_to_db(order_data)
+#             else:
+#                 all_inventory_data = fetch_inventory_data(password, store_url, api_version, store_name)
+#                 save_inventory_data_to_db(all_inventory_data)
+            
+
+#             return JsonResponse({'status': 'success', 'message': 'Data saved successfully'})
+#         except Exception as e:
+#             logging.error(str(e))
+#             return JsonResponse({'status': 'error', 'message': str(e)})
         
 class sync_data(APIView):
     def post(self, request, *args, **kwargs):
@@ -311,3 +381,5 @@ class sync_data(APIView):
         except Exception as e:
             logging.error(str(e))
             return JsonResponse({'status': 'error', 'message': str(e)})
+        
+

@@ -1,22 +1,44 @@
 from django.db import models
 
-class Customer(models.Model):
-    id = models.AutoField(primary_key=True)
-    # order = models.ForeignKey(Orders, on_delete=models.CASCADE, related_name='customers', db_column='OrderID')
-    customer_name = models.CharField(max_length=255, null=True, blank=True)
-    shipping_address = models.TextField(null=True, blank=True)
-    billing_address = models.TextField(null=True, blank=True)
+# class Customer(models.Model):
+#     id = models.AutoField(primary_key=True)
+#     customer_name = models.CharField(max_length=255, null=True, blank=True)
+#     shipping_address = models.TextField(null=True, blank=True)
+#     billing_address = models.TextField(null=True, blank=True)
+#     billing_address_latitude = models.TextField(null=True, blank=True)
+#     billing_address_longitude = models.TextField(null=True, blank=True)
+#     shipping_address_longitude = models.TextField(null=True, blank=True)
+#     shipping_address_latitude = models.TextField(null=True, blank=True)
     
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return self.customer_name
+#     def __str__(self):
+#         return self.customer_name
 
 class Orders(models.Model):
     id = models.AutoField(primary_key=True)
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    # customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    
     orderID = models.CharField(max_length=255, unique=True)
+    customer_name = models.CharField(max_length=255, null=True, blank=True)
+    shipping_address_name = models.CharField(max_length=255, null=True, blank=True)
+    billing_address_name = models.CharField(max_length=255, null=True, blank=True)
+    shipping_address_address1 = models.TextField(null=True, blank=True)
+    billing_address_address1 = models.TextField(null=True, blank=True)
+    shipping_address_city = models.CharField(max_length=255, null=True, blank=True)
+    billing_address_city = models.CharField(max_length=255, null=True, blank=True)
+    shipping_address_zip = models.CharField(max_length=255, null=True, blank=True)
+    billing_address_zip = models.CharField(max_length=255, null=True, blank=True)
+    shipping_address_province_code = models.CharField(max_length=255, null=True, blank=True)
+    shipping_address_country_code = models.CharField(max_length=255, null=True, blank=True)
+    billing_address_country_code = models.CharField(max_length=255, null=True, blank=True)
+    billing_address_province_code = models.CharField(max_length=255, null=True, blank=True)
+    
+    billing_address_latitude = models.TextField(null=True, blank=True)
+    billing_address_longitude = models.TextField(null=True, blank=True)
+    shipping_address_longitude = models.TextField(null=True, blank=True)
+    shipping_address_latitude = models.TextField(null=True, blank=True)
     order_processed_at = models.DateTimeField(null=True, blank=True)
     order_created_at = models.DateTimeField(null=True, blank=True)
     item_count = models.IntegerField(null=True, blank=True)
@@ -38,6 +60,10 @@ class Orders(models.Model):
     status = models.CharField(max_length=255, null=True, blank=True)
     store_name = models.CharField(max_length=255, null=True, blank=True)
     
+    landing_site = models.TextField(null=True, blank=True)
+    order_status_url = models.CharField(max_length=255, null=True, blank=True)
+    referring_site = models.TextField(null=True, blank=True)
+    payment_gateway_names = models.CharField(max_length=255, null=True, blank=True)
     # created_at_shopify = models.DateTimeField(null=True, blank=True)
     updated_at_shopify = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -63,32 +89,52 @@ class OrderItems(models.Model):
         return self.item_title
 
 
-
-# class ShopifyCredentials(models.Model):
-#     id = models.AutoField(primary_key=True)
-#     store_name = models.CharField(max_length=255, null=True, blank=True)
-#     store_url = models.CharField(max_length=255, null=True, blank=True)
-#     api_key = models.CharField(max_length=255, null=True, blank=True)
-#     password = models.CharField(max_length=255, null=True, blank=True)
-#     api_version = models.CharField(max_length=255, null=True, blank=True)
-#     min_date = models.DateTimeField(null=True, blank=True)
-#     max_date = models.DateTimeField(null=True, blank=True)
-#     operation = models.CharField(max_length=255, null=True, blank=True)
+class ShopifyInventoryData(models.Model):
+    id = models.AutoField(primary_key=True)
+    product_id = models.CharField(max_length=255, null=True, blank=True)
+    product_title = models.TextField(max_length=255, null=True, blank=True)
+    vendor = models.CharField(max_length=255, null=True, blank=True)
+    tags = models.CharField(max_length=255, null=True, blank=True)
+    product_type = models.CharField(max_length=255, null=True, blank=True)
+    category = models.TextField(max_length=255, null=True, blank=True)
+    category_name = models.CharField(max_length=255, null=True, blank=True)
+    collections = models.TextField(max_length=255, null=True, blank=True)
+    variant_id = models.CharField(max_length=255, null=True, blank=True)
+    variant_title = models.TextField(max_length=255, null=True, blank=True)
+    variant_sku = models.CharField(max_length=255, null=True, blank=True)
+    location_id = models.CharField(max_length=255, null=True, blank=True)
+    location_name = models.CharField(max_length=255, null=True, blank=True)
+    available = models.IntegerField(default=0)
+    reserved = models.IntegerField(default=0)
+    incoming = models.IntegerField(default=0)
+    committed = models.IntegerField(default=0)
+    damaged = models.IntegerField(default=0)  
+    on_hand = models.IntegerField(default=0)
+    quality_control = models.IntegerField(default=0)
+    safety_check = models.IntegerField(default=0)
     
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     used_on = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-#     def __str__(self):
-#         return self.store_name
-
-# class SecretSurpriseOrders(models.Model):
-#     id = models.AutoField(primary_key=True)
-#     item = models.ForeignKey(OrderItems, on_delete=models.CASCADE, related_name='secret_surprises')
-#     item_title = models.CharField(max_length=255, null=True, blank=True)
-#     item_price = models.CharField(max_length=255, null=True, blank=True)
-
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
-
-#     def __str__(self):
-#         return self.item_title
+    def __str__(self):
+        return f"{self.product_title} - {self.variant_title}"
+    
+    
+class ShopifyCampaign(models.Model):
+    id = models.AutoField(primary_key=True)
+    order = models.ForeignKey(Orders, on_delete=models.CASCADE, related_name='order_campaigns')
+    utm_id = models.CharField(max_length=255, null=True, blank=True)
+    campaign_id = models.CharField(max_length=255, null=True, blank=True)
+    shopif_order_id = models.CharField(max_length=255, null=True, blank=True)
+    landing_site = models.TextField(null=True, blank=True)
+    cmp_id = models.CharField(max_length=255, null=True, blank=True)
+    utm_campaign = models.CharField(max_length=255, null=True, blank=True)
+    utm_source = models.CharField(max_length=255, null=True, blank=True)
+    utm_medium = models.CharField(max_length=255, null=True, blank=True)
+    reffering_site = models.TextField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.shopif_order_id} - {self.utm_campaign}"
